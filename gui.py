@@ -18,14 +18,12 @@ from torch.amp import autocast
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-# ---------------- CONFIGURATION PARAMETERS ----------------
-# --- Paths & Model Info (USER: UPDATE THESE) ---
-# Ensure this path is correct or the .exe won't find the model unless bundled.
+
 MODEL_PATH = r"D:\Punya dede\AOL ML\tumor\checkpoints\xray_classification\efnetb1_tes.pth"
 MODEL_NAME = 'EfficientNet-B1'
 IMAGE_SIZE = 240
 NUM_CLASSES = 3
-CLASS_NAMES = ['glioma', 'meningioma', 'pituitary'] # Must match your trained model's classes
+CLASS_NAMES = ['glioma', 'meningioma', 'pituitary'] 
 
 # --- Grad-CAM Parameters ---
 GRADCAM_TARGET_LAYER_NAME = 'features.8.0' # Specific target for EfficientNet-B1 head
@@ -73,7 +71,7 @@ class GradCAM:
             return np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
         if heatmap.max() > 0:
             heatmap = heatmap / heatmap.max()
-        else: # Should be caught by sum == 0
+        else: 
             if self.activations is not None and self.activations.ndim >=4 :
                  return np.zeros(self.activations.shape[2:], dtype=np.float32)
             return np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
@@ -193,7 +191,7 @@ def process_and_visualize(image_path_str, fig, canvas_widget):
         return None, "Error processing image", "N/A"
 
     # Get prediction and Grad-CAM
-    heatmap_np, predicted_class_idx, output_logits = grad_cam_instance(input_tensor) # No specific class_idx, uses max
+    heatmap_np, predicted_class_idx, output_logits = grad_cam_instance(input_tensor) 
     
     predicted_class_name = CLASS_NAMES[predicted_class_idx]
     probabilities = F.softmax(output_logits, dim=1)
@@ -227,11 +225,11 @@ def process_and_visualize(image_path_str, fig, canvas_widget):
     overlayed_image_np = cv2.addWeighted(original_np, 1 - alpha, heatmap_colored, alpha, 0)
 
     # Update Matplotlib figure
-    fig.clear() # Clear previous plot
-    axs = fig.subplots(1, 3) # Recreate subplots
+    fig.clear() 
+    axs = fig.subplots(1, 3) 
     
     base_filename = os.path.basename(image_path_str)
-    # True label isn't known from single upload, so we omit it or set to "Uploaded"
+    
     fig.suptitle(f"Grad-CAM: {base_filename}\nPredicted: {predicted_class_name} ({confidence_str})", fontsize=10)
 
     axs[0].imshow(original_np)
@@ -246,7 +244,7 @@ def process_and_visualize(image_path_str, fig, canvas_widget):
     axs[2].set_title("Overlay", fontsize=8)
     axs[2].axis('off')
     
-    fig.tight_layout(rect=[0, 0, 1, 0.95]) # Adjust for suptitle
+    fig.tight_layout(rect=[0, 0, 1, 0.95]) 
     canvas_widget.draw()
     
     return predicted_class_name, confidence_str
@@ -282,7 +280,7 @@ class App:
         results_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         # Matplotlib Figure and Canvas
-        self.fig = plt.Figure(figsize=(7.5, 2.5), dpi=100) # Adjusted for 1x3 plot
+        self.fig = plt.Figure(figsize=(7.5, 2.5), dpi=100) 
         self.canvas = FigureCanvasTkAgg(self.fig, master=results_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
@@ -312,11 +310,11 @@ class App:
         conf_val_label.pack(side=tk.LEFT)
         
         # Load model after GUI is set up (non-blocking would be better for UX but complex)
-        self.root.after(100, self.initialize_model) # Use 'after' for a slight delay
+        self.root.after(100, self.initialize_model)
 
     def initialize_model(self):
         self.status_label_var.set("Status: Loading model, please wait...")
-        self.root.update_idletasks() # Update GUI to show message
+        self.root.update_idletasks() 
         if load_application_model():
             self.status_label_var.set(f"Status: Model loaded ({DEVICE}). Ready to upload.")
             self.upload_button.config(state=tk.NORMAL)
@@ -335,7 +333,7 @@ class App:
             filetypes=(("Image files", "*.jpg *.jpeg *.png *.bmp *.gif *.tiff"), ("All files", "*.*"))
         )
         if not file_path:
-            return # User cancelled
+            return 
 
         self.status_label_var.set(f"Status: Processing {os.path.basename(file_path)}...")
         self.pred_label_var.set("Predicted Class: Processing...")
@@ -345,15 +343,15 @@ class App:
 
         pred_name, conf_str = process_and_visualize(file_path, self.fig, self.canvas)
         
-        if pred_name: # If processing was successful (even if heatmap failed)
+        if pred_name: 
             self.pred_label_var.set(f"{pred_name}")
             self.conf_label_var.set(f"{conf_str}")
             self.status_label_var.set(f"Status: Done. {os.path.basename(file_path)}")
-        else: # Error occurred during processing
+        else:
             self.pred_label_var.set("Predicted Class: Error")
             self.conf_label_var.set("Confidence: Error")
             self.status_label_var.set(f"Status: Error processing. Check console/messages.")
-            # Clear the plot or show an error image
+            
             self.fig.clear()
             ax_err = self.fig.add_subplot(111)
             ax_err.text(0.5, 0.5, "Error processing image.", color='red', ha='center', va='center')
@@ -364,7 +362,7 @@ class App:
 if __name__ == '__main__':
     if DEVICE.type == 'cuda':
         try:
-            torch.cuda.init() # Explicitly initialize CUDA if available
+            torch.cuda.init() 
             print("CUDA initialized for application.")
         except Exception as e:
             print(f"Warning: Could not explicitly initialize CUDA: {e}")
