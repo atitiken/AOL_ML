@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg
+*.whl
+
+# Virtual environment (replace 'venv' or 'env' with your actual folder name if different)
+venv/
+env/
+.venv/
+*/pyvenv.cfg
+
+# IDE specific
+.vscode/
+.idea/
+
+# Streamlit
+.streamlit/
+
+# Large data files (if any, add specific paths or extensions)
+# data/*.csv
+# models/*.pth (Be careful with large model files. Consider Git LFS or other storage)
+
+# Secrets (NEVER commit these)
+*.env
+secrets.yaml
+config.ini
