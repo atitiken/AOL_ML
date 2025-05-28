@@ -1,0 +1,6 @@
+streamlit
+torch
+torchvision
+Pillow
+albumentations
+opencv-python-headless
