@@ -3,7 +3,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from PIL import Image, ImageTk
 import numpy as np
-import cv2 # OpenCV for heatmap processing
+import cv2 
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import io
@@ -20,17 +20,17 @@ from albumentations.pytorch import ToTensorV2
 
 # ---------------- CONFIGURATION PARAMETERS ----------------
 # --- Paths & Model Info (USER: UPDATE THESE) ---
-# Ensure this path is correct or the .exe won't find the model unless bundled.
-MODEL_FILENAME = "efnetb1_tes.pth" # Just the filename
+
+MODEL_FILENAME = "efnetb1_tes.pth"
 base_path = getattr(sys, '_MEIPASS', os.path.abspath("."))
 MODEL_PATH = os.path.join(base_path, 'efnetb1_tes.pth')
 MODEL_NAME = 'EfficientNet-B1'
 IMAGE_SIZE = 240
 NUM_CLASSES = 3
-CLASS_NAMES = ['glioma', 'meningioma', 'pituitary'] # Must match your trained model's classes
+CLASS_NAMES = ['glioma', 'meningioma', 'pituitary'] 
 
 # --- Grad-CAM Parameters ---
-GRADCAM_TARGET_LAYER_NAME = 'features.8.0' # Specific target for EfficientNet-B1 head
+GRADCAM_TARGET_LAYER_NAME = 'features.8.0'
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
 # Global variable to hold the loaded model and GradCAM instance
@@ -75,7 +75,7 @@ class GradCAM:
             return np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
         if heatmap.max() > 0:
             heatmap = heatmap / heatmap.max()
-        else: # Should be caught by sum == 0
+        else: 
             if self.activations is not None and self.activations.ndim >=4 :
                  return np.zeros(self.activations.shape[2:], dtype=np.float32)
             return np.zeros((IMAGE_SIZE, IMAGE_SIZE), dtype=np.float32)
@@ -109,10 +109,6 @@ def load_application_model():
         temp_model = None
         if MODEL_NAME == 'EfficientNet-B1':
             temp_model = models.efficientnet_b1(weights=None)
-            num_ftrs = temp_model.classifier[1].in_features
-            temp_model.classifier[1] = nn.Linear(num_ftrs, NUM_CLASSES)
-        elif MODEL_NAME == 'EfficientNet-B0': # Add other models if needed
-            temp_model = models.efficientnet_b0(weights=None)
             num_ftrs = temp_model.classifier[1].in_features
             temp_model.classifier[1] = nn.Linear(num_ftrs, NUM_CLASSES)
         else:
@@ -167,7 +163,7 @@ preprocess_transform = A.Compose([
 def preprocess_image_from_path(image_path):
     try:
         image_pil = Image.open(image_path).convert('RGB')
-        original_image_np = np.array(image_pil) # For display and Grad-CAM overlay
+        original_image_np = np.array(image_pil) 
     except Exception as e:
         messagebox.showerror("Image Error", f"Error loading image {os.path.basename(image_path)}: {e}")
         return None, None
@@ -175,11 +171,11 @@ def preprocess_image_from_path(image_path):
     # Transform for model input
     try:
         augmented = preprocess_transform(image=original_image_np.copy())
-        input_tensor = augmented['image'].unsqueeze(0).to(DEVICE) # Add batch dim
+        input_tensor = augmented['image'].unsqueeze(0).to(DEVICE) 
         return original_image_np, input_tensor
     except Exception as e:
         messagebox.showerror("Preprocessing Error", f"Error preprocessing image: {e}")
-        return original_image_np, None # Return original for context if tensor fails
+        return original_image_np, None
 
 # ------------- CORE PROCESSING AND VISUALIZATION LOGIC ---------------
 def process_and_visualize(image_path_str, fig, canvas_widget):
@@ -195,7 +191,7 @@ def process_and_visualize(image_path_str, fig, canvas_widget):
         return None, "Error processing image", "N/A"
 
     # Get prediction and Grad-CAM
-    heatmap_np, predicted_class_idx, output_logits = grad_cam_instance(input_tensor) # No specific class_idx, uses max
+    heatmap_np, predicted_class_idx, output_logits = grad_cam_instance(input_tensor) 
     
     predicted_class_name = CLASS_NAMES[predicted_class_idx]
     probabilities = F.softmax(output_logits, dim=1)
@@ -224,7 +220,7 @@ def process_and_visualize(image_path_str, fig, canvas_widget):
         return None, predicted_class_name, confidence_str
         
     heatmap_colored = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
-    heatmap_colored = cv2.cvtColor(heatmap_colored, cv2.COLOR_BGR2RGB) # OpenCV is BGR
+    heatmap_colored = cv2.cvtColor(heatmap_colored, cv2.COLOR_BGR2RGB) 
     alpha = 0.5
     overlayed_image_np = cv2.addWeighted(original_np, 1 - alpha, heatmap_colored, alpha, 0)
 
@@ -248,7 +244,7 @@ def process_and_visualize(image_path_str, fig, canvas_widget):
     axs[2].set_title("Overlay", fontsize=8)
     axs[2].axis('off')
     
-    fig.tight_layout(rect=[0, 0, 1, 0.95]) # Adjust for suptitle
+    fig.tight_layout(rect=[0, 0, 1, 0.95]) 
     canvas_widget.draw()
     
     return predicted_class_name, confidence_str
@@ -284,7 +280,7 @@ class App:
         results_frame.pack(side=tk.TOP, fill=tk.BOTH, expand=True)
 
         # Matplotlib Figure and Canvas
-        self.fig = plt.Figure(figsize=(7.5, 2.5), dpi=100) # Adjusted for 1x3 plot
+        self.fig = plt.Figure(figsize=(7.5, 2.5), dpi=100) 
         self.canvas = FigureCanvasTkAgg(self.fig, master=results_frame)
         self.canvas_widget = self.canvas.get_tk_widget()
         self.canvas_widget.pack(side=tk.TOP, fill=tk.BOTH, expand=True, pady=10)
@@ -366,7 +362,7 @@ class App:
 if __name__ == '__main__':
     if DEVICE.type == 'cuda':
         try:
-            torch.cuda.init() # Explicitly initialize CUDA if available
+            torch.cuda.init() 
             print("CUDA initialized for application.")
         except Exception as e:
             print(f"Warning: Could not explicitly initialize CUDA: {e}")
