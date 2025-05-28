@@ -17,8 +17,18 @@ from albumentations.pytorch import ToTensorV2
 
 # ---------------- CONFIGURATION PARAMETERS ----------------
 # --- Paths & Model Info ---
-# Ensure this path is correct. For Streamlit deployment, consider relative paths or cloud storage.
-MODEL_PATH = r"D:\Punya dede\AOL ML\tumor\checkpoints\xray_classification\efnetb1_tes.pth" # Or a path accessible by Streamlit
+
+# Get the directory where the current script (strimlit.py) is located
+script_dir = os.path.dirname(os.path.abspath(__file__))
+
+# Construct the relative path to the model
+# This assumes your model is in: your_repo_root/checkpoints/xray_classification/efnetb1_tes.pth
+# and your script (strimlit.py) is in: your_repo_root/
+MODEL_PATH = os.path.join(script_dir, "checkpoints", "xray_classification", "efnetb1_tes.pth")
+
+# You can uncomment the line below for local debugging to verify the path
+# print(f"Attempting to load model from: {MODEL_PATH}")
+
 MODEL_NAME = 'EfficientNet-B1'
 IMAGE_SIZE = 240
 NUM_CLASSES = 3
@@ -100,27 +110,24 @@ class GradCAM:
         one_hot = torch.zeros_like(output)
         one_hot[0][class_idx] = 1
         
-        # Detach output before backward to ensure it's a leaf tensor if retain_graph=True
-        # However, retain_graph is often needed if backward is called multiple times on the same graph segment.
-        # For Grad-CAM, typically it's one backward pass per heatmap.
         try:
-            output.backward(gradient=one_hot, retain_graph=True) # Retain graph if model might be used further
+            output.backward(gradient=one_hot, retain_graph=True) 
             if self.gradients is None:
                 st.warning("Warning: Gradients are None after backward pass. Check hooks and model structure.")
         except RuntimeError as e:
             st.error(f"RuntimeError during backward pass: {e}. Gradients might not be available.")
-            self.gradients = None # Ensure gradients are reset if backward fails
+            self.gradients = None 
             
         return self.generate_heatmap(), class_idx, output.detach()
 
 # ---------------- MODEL LOADING FUNCTION ----------------
-@st.cache_resource(show_spinner="Loading AI model...") # Caches the model and GradCAM instance
+@st.cache_resource(show_spinner="Loading AI model...") 
 def load_application_model_and_gradcam():
     try:
         st.write(f"Loading model: {MODEL_NAME} from {MODEL_PATH} to {DEVICE}")
         temp_model = None
         if MODEL_NAME == 'EfficientNet-B1':
-            temp_model = models.efficientnet_b1(weights=None) # Use weights=None for custom trained
+            temp_model = models.efficientnet_b1(weights=None) 
             num_ftrs = temp_model.classifier[1].in_features
             temp_model.classifier[1] = nn.Linear(num_ftrs, NUM_CLASSES)
         elif MODEL_NAME == 'EfficientNet-B0':
@@ -137,13 +144,13 @@ def load_application_model_and_gradcam():
         
         temp_model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
         temp_model = temp_model.to(DEVICE)
-        temp_model.eval() # Set model to evaluation mode
+        temp_model.eval() 
         st.success("Model loaded successfully.")
 
         target_layer_module = get_target_layer_module_by_name(temp_model, GRADCAM_TARGET_LAYER_NAME)
         if target_layer_module is None:
             st.error(f"Failed to get target layer: {GRADCAM_TARGET_LAYER_NAME}")
-            return temp_model, None # Return model even if GradCAM fails, for basic prediction
+            return temp_model, None 
 
         grad_cam_instance = GradCAM(model=temp_model, target_layer_module=target_layer_module)
         st.success(f"Grad-CAM initialized with target layer: {GRADCAM_TARGET_LAYER_NAME}")
@@ -151,7 +158,7 @@ def load_application_model_and_gradcam():
         
     except Exception as e:
         st.error(f"Failed to load model or init Grad-CAM: {e}")
-        print(f"Exception during model load: {e}") # Also print to console for debugging
+        print(f"Exception during model load: {e}") 
         return None, None
 
 def get_target_layer_module_by_name(model_obj, target_layer_name_str):
@@ -159,9 +166,9 @@ def get_target_layer_module_by_name(model_obj, target_layer_name_str):
         layers = target_layer_name_str.split('.')
         module = model_obj
         for layer_name_part in layers:
-            if layer_name_part.isdigit(): # For sequential blocks
+            if layer_name_part.isdigit(): 
                 module = module[int(layer_name_part)]
-            else: # For named attributes
+            else: 
                 module = getattr(module, layer_name_part)
         return module
     except Exception as e:
@@ -172,7 +179,6 @@ def get_target_layer_module_by_name(model_obj, target_layer_name_str):
 # ---------------- IMAGE PREPROCESSING ----------------
 MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
-# Reusable preprocess_transform
 preprocess_transform = A.Compose([
     A.Resize(height=IMAGE_SIZE, width=IMAGE_SIZE),
     A.Normalize(mean=MEAN, std=STD),
@@ -180,7 +186,6 @@ preprocess_transform = A.Compose([
 ])
 
 def preprocess_image_pil(image_pil):
-    """Takes a PIL image, returns original_np and input_tensor."""
     try:
         original_image_np = np.array(image_pil.convert('RGB'))
     except Exception as e:
@@ -188,7 +193,7 @@ def preprocess_image_pil(image_pil):
         return None, None
     
     try:
-        augmented = preprocess_transform(image=original_image_np.copy()) # Use .copy()
+        augmented = preprocess_transform(image=original_image_np.copy()) 
         input_tensor = augmented['image'].unsqueeze(0).to(DEVICE)
         return original_image_np, input_tensor
     except Exception as e:
@@ -202,7 +207,6 @@ def generate_and_display_visuals(original_np, input_tensor, model, grad_cam_inst
         return "Error", "N/A", None, None, None
     if grad_cam_instance is None:
         st.warning("Grad-CAM not available. Showing prediction only.")
-        # Perform prediction without Grad-CAM
         with torch.no_grad(), autocast(DEVICE.type, enabled=(DEVICE.type == 'cuda')):
             output_logits = model(input_tensor)
         predicted_class_idx = torch.argmax(output_logits, dim=1).item()
@@ -210,10 +214,8 @@ def generate_and_display_visuals(original_np, input_tensor, model, grad_cam_inst
         probabilities = F.softmax(output_logits, dim=1)
         confidence = probabilities[0, predicted_class_idx].item() * 100
         confidence_str = f"{confidence:.2f}%"
-        return predicted_class_name, confidence_str, original_np, None, None # No heatmap/overlay
+        return predicted_class_name, confidence_str, original_np, None, None 
 
-    # Get prediction and Grad-CAM
-    # No specific class_idx, grad_cam_instance.__call__ uses max
     heatmap_np, predicted_class_idx, output_logits = grad_cam_instance(input_tensor) 
     
     predicted_class_name = CLASS_NAMES[predicted_class_idx]
@@ -223,34 +225,30 @@ def generate_and_display_visuals(original_np, input_tensor, model, grad_cam_inst
 
     if heatmap_np is None:
         st.error("Could not generate heatmap.")
-        return predicted_class_name, confidence_str, original_np, None, None # Return original image
+        return predicted_class_name, confidence_str, original_np, None, None 
     
-    # Robust checks for heatmap before resize
     if not isinstance(heatmap_np, np.ndarray) or heatmap_np.ndim != 2 or heatmap_np.size == 0:
         st.error("Generated heatmap is invalid (not 2D or empty).")
         return predicted_class_name, confidence_str, original_np, None, None
     if np.isnan(heatmap_np).any() or np.isinf(heatmap_np).any():
         st.warning("Heatmap contains NaN or Inf. Clamping values.")
         heatmap_np = np.nan_to_num(heatmap_np, nan=0.0, posinf=1.0, neginf=0.0)
-    if heatmap_np.dtype != np.float32: # Ensure float32 for cv2 operations
+    if heatmap_np.dtype != np.float32: 
         heatmap_np = heatmap_np.astype(np.float32)
 
-
-    # Resize heatmap, color, and overlay
     overlayed_image_np = None
     heatmap_resized_display = None
     try:
         heatmap_resized = cv2.resize(heatmap_np, (original_np.shape[1], original_np.shape[0]))
-        heatmap_resized_display = heatmap_resized # For displaying raw heatmap
+        heatmap_resized_display = heatmap_resized 
         
         heatmap_colored = cv2.applyColorMap(np.uint8(255 * heatmap_resized), cv2.COLORMAP_JET)
-        heatmap_colored = cv2.cvtColor(heatmap_colored, cv2.COLOR_BGR2RGB) # OpenCV is BGR
+        heatmap_colored = cv2.cvtColor(heatmap_colored, cv2.COLOR_BGR2RGB) 
         
         alpha = 0.5
         overlayed_image_np = cv2.addWeighted(original_np, 1 - alpha, heatmap_colored, alpha, 0)
     except cv2.error as e:
         st.error(f"OpenCV Error during heatmap processing: {e}")
-        # Continue to show prediction and original image if overlay fails
     except Exception as e:
         st.error(f"Unexpected error during heatmap processing: {e}")
 
@@ -262,7 +260,6 @@ st.set_page_config(layout="wide", page_title="Grad-CAM Visualizer")
 st.title("🧠 Grad-CAM Visualizer for Brain Tumor Classification")
 st.caption(f"Model: {MODEL_NAME} | Target Layer for Grad-CAM: {GRADCAM_TARGET_LAYER_NAME} | Device: {DEVICE}")
 
-# Load model and Grad-CAM instance (cached)
 loaded_model, grad_cam_instance = load_application_model_and_gradcam()
 
 if loaded_model:
@@ -272,18 +269,15 @@ if loaded_model:
     else:
         st.sidebar.warning("Grad-CAM failed to initialize. Only predictions will be available.")
 else:
-    st.sidebar.error("Model loading failed. Please check the logs and MODEL_PATH.")
-    st.stop() # Stop execution if model fails to load
+    st.sidebar.error("Model loading failed. Please check the logs and ensure MODEL_PATH is correct relative to the script in your repository.")
+    st.stop() 
 
-# File uploader
 uploaded_file = st.file_uploader("Choose an X-ray image...", type=["jpg", "jpeg", "png", "bmp", "tiff"])
 
 if uploaded_file is not None:
-    # To read image file buffer
     image_pil = Image.open(uploaded_file).convert('RGB')
     st.write(f"Uploaded: {uploaded_file.name}")
 
-    # Preprocess the uploaded image
     with st.spinner("Preprocessing image..."):
         original_np, input_tensor = preprocess_image_pil(image_pil)
 
@@ -294,22 +288,18 @@ if uploaded_file is not None:
             pred_name, conf_str, displayed_original, heatmap_display, overlay_display = \
                 generate_and_display_visuals(original_np, input_tensor, loaded_model, grad_cam_instance)
 
-        # Displaying results
         col_pred, col_conf = st.columns(2)
         with col_pred:
             st.metric("Predicted Class", pred_name)
         with col_conf:
             st.metric("Confidence", conf_str)
         
-        # Display images
         col1, col2, col3 = st.columns(3)
         with col1:
             st.image(displayed_original, caption="Original Image", use_column_width=True)
         
         if heatmap_display is not None:
             with col2:
-                # Display heatmap using 'jet' colormap, normalize if necessary
-                # st.image normalizes float arrays to 0-1, so no explicit normalization needed here if heatmap_display is already 0-1
                 st.image(heatmap_display, caption="Grad-CAM Heatmap", use_column_width=True, clamp=True, channels="GRAY")
         else:
             with col2:
@@ -318,7 +308,7 @@ if uploaded_file is not None:
         if overlay_display is not None:
             with col3:
                 st.image(overlay_display, caption="Overlayed Image (Original + Heatmap)", use_column_width=True)
-        elif grad_cam_instance is not None: # Only show this if GradCAM was expected
+        elif grad_cam_instance is not None: 
              with col3:
                 st.info("Overlay not available due to processing error.")
         
