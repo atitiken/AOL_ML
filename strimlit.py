@@ -24,7 +24,7 @@ script_dir = os.path.dirname(os.path.abspath(__file__))
 # Construct the relative path to the model
 # This assumes your model is in: your_repo_root/checkpoints/xray_classification/efnetb1_tes.pth
 # and your script (strimlit.py) is in: your_repo_root/
-MODEL_PATH = os.path.join(script_dir, "checkpoints", "xray_classification", "efnetb1_tes.pth")
+MODEL_PATH = os.path.join(script_dir, "efnetb1_tes.pth")
 
 # You can uncomment the line below for local debugging to verify the path
 # print(f"Attempting to load model from: {MODEL_PATH}")
