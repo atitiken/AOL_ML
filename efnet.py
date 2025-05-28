@@ -3,8 +3,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torch.optim.lr_scheduler import CosineAnnealingLR
-from torchvision import models # torchvision.models for EfficientNet
-import torchvision.transforms.functional as TF # For ToTensor in dataset if not using albumentations for all
+from torchvision import models 
+import torchvision.transforms.functional as TF 
 from sklearn.metrics import classification_report, confusion_matrix, f1_score
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
@@ -15,12 +15,9 @@ import numpy as np
 from PIL import Image
 from torch.utils.data import Dataset, DataLoader, WeightedRandomSampler
 from torch.amp import GradScaler, autocast
-
-# --- Albumentations Import ---
 import albumentations as A
 from albumentations.pytorch import ToTensorV2
 
-# --- Focal Loss Import ---
 import torch.nn.functional as F
 
 
@@ -32,24 +29,24 @@ VAL_SPLIT_RATIO = 0.15
 TEST_SPLIT_RATIO = 0.15
 
 # --- Model & Training ---
-MODEL_NAME = 'EfficientNet-B1' # Changed to EfficientNet-B1
-IMAGE_SIZE = 240               # Correct image size for EfficientNet-B1
+MODEL_NAME = 'EfficientNet-B1' 
+IMAGE_SIZE = 240              
 NUM_CLASSES = 3
-NUM_EPOCHS = 50                # Increased epochs
-BATCH_SIZE = 16                # Potentially reduce due to larger model/image size
+NUM_EPOCHS = 50                
+BATCH_SIZE = 16                
 LEARNING_RATE = 1e-4
 LEARNING_RATE_BACKBONE = 1e-5
 WEIGHT_DECAY = 1e-4
-PATIENCE_EARLY_STOPPING = 10   # Might need more patience with longer training
-LABEL_SMOOTHING = 0.0          # Set to 0.0 as FocalLoss used here doesn't directly support it
+PATIENCE_EARLY_STOPPING = 10   
+LABEL_SMOOTHING = 0.0         
 
 # --- Fine-tuning Strategy ---
-FREEZE_BACKBONE_INITIALLY = True # Or False to train full model from start
+FREEZE_BACKBONE_INITIALLY = True 
 EPOCHS_TO_TRAIN_CLASSIFIER_ONLY = 5
 
 # --- Data Handling ---
 USE_WEIGHTED_SAMPLER = True
-USE_CLASS_WEIGHTS_IN_LOSS = True # This will be used for FocalLoss alpha
+USE_CLASS_WEIGHTS_IN_LOSS = True 
 
 # --- Reproducibility & Device ---
 MANUAL_SEED = 42
@@ -70,15 +67,12 @@ CLASS_NAMES = None
 class FocalLoss(nn.Module):
     def __init__(self, alpha=None, gamma=2.0, reduction='mean'):
         super(FocalLoss, self).__init__()
-        # alpha can be a tensor of weights for each class, e.g., from get_class_weights()
         self.alpha = alpha
         self.gamma = gamma
         self.reduction = reduction
 
     def forward(self, inputs, targets):
-        # inputs: (batch_size, num_classes)
-        # targets: (batch_size)
-        
+       
         # Calculate Cross Entropy loss without reduction
         CE_loss = F.cross_entropy(inputs, targets, reduction='none')
         
@@ -103,14 +97,14 @@ class FocalLoss(nn.Module):
             return torch.mean(F_loss)
         elif self.reduction == 'sum':
             return torch.sum(F_loss)
-        else: # 'none'
+        else: 
             return F_loss
 
 # ---------------- CUSTOM IMAGE DATASET CLASS (MODIFIED FOR ALBUMENTATIONS) ----------------
 class CustomImageDataset(Dataset):
     def __init__(self, image_paths_list, labels_list,
                  master_class_to_idx, master_classes_list,
-                 transform=None, dataset_name="Dataset"): # transform is now an Albumentations transform
+                 transform=None, dataset_name="Dataset"): 
         self.image_paths = image_paths_list
         self.labels = labels_list
         self.transform = transform
@@ -153,14 +147,11 @@ class CustomImageDataset(Dataset):
             return torch.randn(3, IMAGE_SIZE, IMAGE_SIZE), torch.tensor(-1)
 
         if self.transform:
-            # Albumentations expects a dictionary with 'image' key
             augmented = self.transform(image=image_np)
-            image = augmented['image'] # This is now a PyTorch tensor
+            image = augmented['image'] 
         else:
-            # Fallback if no transform (e.g. for simple loading without augmentation)
-            # This part might need adjustment if you always expect Albumentations
-            image = TF.to_tensor(image_pil) # Basic PyTorch ToTensor
-            # You might need to add normalization here if not using Albumentations' Normalize
+            image = TF.to_tensor(image_pil) 
+           
 
         return image, label
 
@@ -172,7 +163,7 @@ class CustomImageDataset(Dataset):
         weights = [total_samples / (len(self.classes) * count) if count > 0 else 0 for count in self.class_counts]
         # For Focal Loss alpha, sometimes weights are normalized (e.g., sum to 1) or directly used.
         # The provided FocalLoss class can handle unnormalized weights like these.
-        return torch.tensor(weights, dtype=torch.float) # Removed .to(DEVICE) here, will be moved to device in FocalLoss
+        return torch.tensor(weights, dtype=torch.float) 
 
     def get_sampler_weights(self):
         if sum(self.class_counts) == 0:
@@ -259,27 +250,25 @@ MEAN = [0.485, 0.456, 0.406]
 STD = [0.229, 0.224, 0.225]
 
 train_transform_alb = A.Compose([
-    A.RandomResizedCrop(size=(IMAGE_SIZE, IMAGE_SIZE), scale=(0.7, 1.0), p=1.0), # Changed height/width to size
+    A.RandomResizedCrop(size=(IMAGE_SIZE, IMAGE_SIZE), scale=(0.7, 1.0), p=1.0), 
     A.HorizontalFlip(p=0.5),
     A.RandomRotate90(p=0.5),
-    A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.1, rotate_limit=15, p=0.5), # Added ShiftScaleRotate
-    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),    # Added Brightness/Contrast
-    A.GaussNoise(var_limit=(10.0, 50.0), p=0.3),                                    # Added GaussNoise
+    A.ShiftScaleRotate(shift_limit=0.0625, scale_limit=0.1, rotate_limit=15, p=0.5), 
+    A.RandomBrightnessContrast(brightness_limit=0.2, contrast_limit=0.2, p=0.5),   
+    A.GaussNoise(var_limit=(10.0, 50.0), p=0.3),                                   
     A.OneOf([
         A.MotionBlur(p=0.5),
         A.MedianBlur(blur_limit=3, p=0.5),
         A.Blur(blur_limit=3, p=0.5),
     ], p=0.3), # p for OneOf itself
-    # RandAugment equivalent is more complex to replicate directly in Albumentations
-    # but the above combination provides strong augmentation.
-    # A.Cutout(num_holes=8, max_h_size=int(IMAGE_SIZE*0.1), max_w_size=int(IMAGE_SIZE*0.1), fill_value=0, p=0.3), # Example Cutout
-    A.Normalize(mean=MEAN, std=STD), # Normalization is crucial
-    ToTensorV2()                     # Converts NumPy to PyTorch Tensor (C, H, W)
+   
+    A.Normalize(mean=MEAN, std=STD),
+    ToTensorV2()                    
 ])
 
 val_test_transform_alb = A.Compose([
-    A.Resize(height=IMAGE_SIZE, width=IMAGE_SIZE), # Simpler resize for val/test
-    # A.CenterCrop(height=IMAGE_SIZE, width=IMAGE_SIZE), # Often used, but Resize alone can be fine
+    A.Resize(height=IMAGE_SIZE, width=IMAGE_SIZE), 
+   
     A.Normalize(mean=MEAN, std=STD),
     ToTensorV2()
 ])
@@ -364,7 +353,7 @@ def set_parameter_requires_grad(model_to_set, feature_extracting):
         if hasattr(model_to_set, 'classifier') and isinstance(model_to_set.classifier, nn.Sequential):
             for param in model_to_set.classifier.parameters():
                 param.requires_grad = True
-        elif hasattr(model_to_set, 'classifier') and isinstance(model_to_set.classifier, nn.Linear): # For some models
+        elif hasattr(model_to_set, 'classifier') and isinstance(model_to_set.classifier, nn.Linear): 
              for param in model_to_set.classifier.parameters():
                 param.requires_grad = True
         else:
@@ -389,7 +378,7 @@ if USE_CLASS_WEIGHTS_IN_LOSS:
         print("Warning: Could not get class weights for Focal Loss. Proceeding without alpha.")
 
 # Using FocalLoss
-criterion = FocalLoss(alpha=focal_loss_alpha, gamma=2.0) # gamma is a common value, can be tuned
+criterion = FocalLoss(alpha=focal_loss_alpha, gamma=2.0) 
 print(f"Using FocalLoss with gamma=2.0 and alpha={'calculated' if focal_loss_alpha is not None else 'None'}")
 
 
@@ -397,7 +386,7 @@ params_to_optimize = []
 # Determine parameters to optimize based on freeze strategy
 if not FREEZE_BACKBONE_INITIALLY or (FREEZE_BACKBONE_INITIALLY and EPOCHS_TO_TRAIN_CLASSIFIER_ONLY == 0) :
     print(f"Setting up optimizer for full model training: Backbone LR={LEARNING_RATE_BACKBONE}, Classifier LR={LEARNING_RATE}")
-    # This assumes EfficientNet structure: features (backbone) and classifier
+   
     if hasattr(model, 'features') and hasattr(model, 'classifier'):
         params_to_optimize = [
             {"params": filter(lambda p: p.requires_grad, model.features.parameters()), "lr": LEARNING_RATE_BACKBONE},
@@ -413,7 +402,7 @@ else: # Initially training only classifier
 
 
 optimizer = optim.AdamW(params_to_optimize, lr=LEARNING_RATE, weight_decay=WEIGHT_DECAY)
-scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=1e-7) # Adjusted eta_min
+scheduler = CosineAnnealingLR(optimizer, T_max=NUM_EPOCHS, eta_min=1e-7) 
 scaler = GradScaler(enabled=(DEVICE.type == 'cuda'))
 
 # ---------------- EVALUATION FUNCTION ----------------
@@ -525,7 +514,7 @@ def train_model_main(model_train, criterion_train, optimizer_train, scheduler_tr
         for inputs, labels in progress_bar_train:
             inputs = inputs.to(DEVICE, non_blocking=PIN_MEMORY)
             labels = labels.to(DEVICE, non_blocking=PIN_MEMORY)
-            optimizer_train.zero_grad(set_to_none=True) # More efficient zeroing
+            optimizer_train.zero_grad(set_to_none=True) 
             autocast_enabled_train = (DEVICE.type == 'cuda')
             autocast_dtype_train = torch.float16 if DEVICE.type == 'cuda' else None # AMP
             with autocast(DEVICE.type, enabled=autocast_enabled_train, dtype=autocast_dtype_train):
